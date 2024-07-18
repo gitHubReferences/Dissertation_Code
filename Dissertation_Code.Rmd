@@ -1,0 +1,3144 @@
+---
+title: "Dissertation"
+output: html_document
+date: "2024-05-21"
+---
+
+```{r include=FALSE}
+library(dplyr)
+library(caret)
+library(rpart)
+library(randomForest)
+library(Metrics)
+library(tidyverse)
+library(ROSE)
+library(scales)
+library(DMwR2)
+library(smotefamily)
+library(knitr)
+library(kableExtra)
+library(rpart.plot)
+library(pROC)
+library(e1071)
+library(keras)
+library(magrittr)
+library(tensorflow)
+library(reticulate)
+library(nnet)
+library(h2o)
+library(readr)
+library(rsample) 
+library(recipes) 
+library(yardstick) 
+library(corrr) 
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+library(forecast)
+library(tseries)
+library(caret)
+library(gbm)
+library(xgboost)
+library(segmented)
+library(tsModel)
+
+```
+
+
+```{r}
+
+data_Ireland <- read_csv("PPR.csv")
+head(data_Ireland)
+```
+
+```{r}
+data_Dublin <- data_Ireland[data_Ireland$County == "Dublin", ]
+data_Dublin <- subset(data_Dublin, select = -Eircode)
+data_Dublin <- subset(data_Dublin, select = -`Property Size Description`)
+head(data_Dublin)
+```
+
+
+```{r}
+data_Dublin$Price <- iconv(data_Dublin$Price, from = "latin1", to = "UTF-8")
+ head(data_Dublin)
+data_Dublin$Price<- substr(data_Dublin$Price, 3, nchar(data_Dublin$Price))
+
+head(data_Dublin)
+```
+
+```{r}
+data_Dublin$Price <- gsub("[^0-9.]", "", data_Dublin$Price)
+
+#char to num
+data_Dublin$Price <- as.numeric(data_Dublin$Price)
+head(data_Dublin)
+
+```
+
+```{r}
+data_Dublin$`Date of Sale` <- as.Date(data_Dublin$`Date of Sale`, format = "%d/%m/%Y")
+head(data_Dublin)
+str(data_Dublin$`Date of Sale`)
+
+```
+
+
+```{r}
+data_Dublin<- data.frame(data_Dublin)
+head(data_Dublin)
+                   
+```
+
+```{r}
+ggplot(data_Dublin, aes(x = data_Dublin$Date.of.Sale, y = Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  scale_y_continuous(labels = scales::comma) + 
+  labs(title = "Price Over Time",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme_minimal()                     
+
+```
+
+
+EU Housing Prices overtime
+
+```{r}
+
+data_EU_housingprices <- read_csv("EU housing prices 2005-2023 data.csv")
+head(data_EU_housingprices)
+str(data_EU_housingprices)
+```
+
+```{r}
+#filter area
+#data_EA <- data_EU_housingprices[data_EU_housingprices$Area == "Belgium",]
+data_EA <- rbind(data_EU_housingprices[data_EU_housingprices$Area == "Belgium",],data_EU_housingprices[data_EU_housingprices$Area == "Germany",],data_EU_housingprices[data_EU_housingprices$Area == "France",],data_EU_housingprices[data_EU_housingprices$Area == "Italy",],data_EU_housingprices[data_EU_housingprices$Area == "United Kingdom",],data_EU_housingprices[data_EU_housingprices$Area == "Norway",],data_EU_housingprices[data_EU_housingprices$Area == "Switzerland",],data_EU_housingprices[data_EU_housingprices$Area == "Spain",],data_EU_housingprices[data_EU_housingprices$Area == "Austria",],data_EU_housingprices[data_EU_housingprices$Area == "Ireland",])
+head(data_EA)
+
+
+
+
+data_long <- data_EA %>%
+  pivot_longer(cols = starts_with("20"), names_to = "year", values_to = "price")
+
+data_long$year <- as.numeric(data_long$year)
+
+#char to num
+data_long$price <- gsub("[^0-9.]", "", data_long$price)
+data_long$price <- as.numeric(data_long$price)
+
+head(data_long)
+
+
+```
+
+```{r}
+#plot
+p <- ggplot(data_long, aes(x = year, y = price, color = Area)) +
+  geom_line(size = 1) +
+  labs(
+    title = "Housing Prices in Europe Over Time",
+    x = "Year",
+    y = "Housing Price"
+  )  + 
+  theme(panel.background = element_rect(fill = "white"),
+             panel.grid.major = element_line(color = "gray"),
+             panel.grid.minor = element_line(color = "gray"),
+             axis.line = element_line(color = "black"),
+             plot.title = element_text(size = 20),   
+             legend.title = element_text(size = 17),   
+             legend.text = element_text(size = 17), 
+        axis.title.x = element_text(size = 16),   
+        axis.title.y = element_text(size = 16)
+        )    
+
+p
+ggsave("Europe.png", plot = p, width = 15, height = 8, units = "in")
+
+```
+
+```{r}
+
+custom_colors <- c(
+  "Belgium" = "darkorange",
+  "Germany" = "#2ECC71",
+  "France" = "purple",
+  "Italy" = "#388E3C",
+  "United Kingdom" = "#81D4FA",
+  "Norway" = "gold",
+  "Spain" = "darkmagenta",
+  "Austria" = "hotpink",
+  "Ireland" = "blue"  #Ireland blue
+)
+
+
+#plot
+p <- ggplot(data_long, aes(x = year, y = price, color = Area)) +
+  geom_line(size=1) +
+  scale_color_manual(values = custom_colors) +
+  labs(
+    title = "Housing Prices in Europe Over Time",
+    x = "Year",
+    y = "Housing Price"
+  )  + theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "gray"),
+    panel.grid.minor = element_line(color = "gray"),axis.line = element_line(color = "black"))
+
+p
+ggsave("Europe.png", plot = p, width = 15, height = 8, units = "in")
+
+```
+
+2023 Map
+
+
+```{r}
+#data_EA <- data_EU_housingprices[data_EU_housingprices$Area == "Belgium",]
+data_EA_2023 <- rbind(data_EU_housingprices[data_EU_housingprices$Area == "Ireland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Belgium",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Germany",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "France",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Italy",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "United Kingdom",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Norway",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Switzerland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Spain",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Austria",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Bulgaria",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Czechia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Estonia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Croatia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Cyprus",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Latvia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Lithuania",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Luxembourg",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Hungary",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Malta",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Netherlands",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Portugal",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Poland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Malta",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Romania",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Finland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Slovenia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Slovakia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Iceland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Sweden",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Iceland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Denmark",])
+
+
+
+
+data_EA_long <- data_EA_2023 %>%
+  pivot_longer(cols = starts_with("20"), names_to = "year", values_to = "price")
+
+data_EA_long$year <- as.numeric(data_EA_long$year)
+
+#char to num
+data_EA_long$price <- gsub("[^0-9.]", "", data_EA_long$price)
+data_EA_long$price <- as.numeric(data_EA_long$price)
+
+head(data_EA_long)
+
+data_2023 <- data_EA_long[data_EA_long$year == "2023",]
+
+
+```
+
+
+```{r}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+europe <- subset(world, continent == "Europe")
+
+europe_map_data <- merge(europe, data_2023, by.x = "name", by.y = "Area", all.x = TRUE)
+
+head(data_2023)
+xlim <- c(-10, 55)  
+ylim <- c(35, 85)   
+```
+
+
+```{r}
+map <- ggplot() +
+  geom_sf(data = europe_map_data, aes(fill = price)) +
+  scale_fill_viridis_c(option = "D", direction = -1, name = "price") + 
+  labs(title = "Heatmap of Housing prices in Europe") +
+  coord_sf(xlim = xlim, ylim = ylim) + theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "gray"),
+    panel.grid.minor = element_line(color = "gray"))
+
+map
+ggsave("heatmap 2023.png", plot = map, width = 15, height = 8, units = "in")
+
+```
+
+
+2017 Map
+
+```{r}
+#data_EA <- data_EU_housingprices[data_EU_housingprices$Area == "Belgium",]
+data_EA_2017 <- rbind(data_EU_housingprices[data_EU_housingprices$Area == "Ireland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Belgium",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Germany",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "France",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Italy",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "United Kingdom",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Norway",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Switzerland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Spain",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Austria",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Bulgaria",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Czechia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Estonia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Croatia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Cyprus",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Latvia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Lithuania",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Luxembourg",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Hungary",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Malta",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Netherlands",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Portugal",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Poland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Malta",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Romania",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Finland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Slovenia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Slovakia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Iceland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Sweden",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Iceland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Denmark",])
+
+
+
+data_EA_long <- data_EA_2017 %>%
+  pivot_longer(cols = starts_with("20"), names_to = "year", values_to = "price")
+
+data_EA_long$year <- as.numeric(data_EA_long$year)
+
+#char to num
+data_EA_long$price <- gsub("[^0-9.]", "", data_EA_long$price)
+data_EA_long$price <- as.numeric(data_EA_long$price)
+
+head(data_EA_long)
+
+data_2017 <- data_EA_long[data_EA_long$year == "2017",]
+
+
+```
+
+
+```{r}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+europe <- subset(world, continent == "Europe")
+
+europe_map_data <- merge(europe, data_2017, by.x = "name", by.y = "Area", all.x = TRUE)
+
+head(data_2017)
+xlim <- c(-10, 55)  
+ylim <- c(35, 85)   
+```
+
+
+```{r}
+map <- ggplot() +
+  geom_sf(data = europe_map_data, aes(fill = price)) +
+  #scale_fill_distiller(direction = -1, palette = "PuRd") + #pinks
+  #scale_fill_distiller(palette = "YlOrRd") + #red oranges
+  #scale_fill_distiller(palette = "BuGn") + #greens
+  scale_fill_viridis_c(option = "D", direction = -1, name = "price") + 
+  labs(title = "Heatmap of Housing prices in Europe") +
+  coord_sf(xlim = xlim, ylim = ylim) + theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "gray"),
+    panel.grid.minor = element_line(color = "gray"))
+
+map
+ggsave("heatmap 2017.png", plot = map, width = 15, height = 8, units = "in")
+
+```
+
+2012 Map
+
+```{r}
+#data_EA <- data_EU_housingprices[data_EU_housingprices$Area == "Belgium",]
+data_EA_2012 <- rbind(data_EU_housingprices[data_EU_housingprices$Area == "Ireland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Belgium",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Germany",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "France",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Italy",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "United Kingdom",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Norway",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Switzerland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Spain",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Austria",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Bulgaria",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Czechia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Estonia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Croatia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Cyprus",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Latvia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Lithuania",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Luxembourg",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Hungary",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Malta",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Netherlands",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Portugal",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Poland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Malta",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Romania",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Finland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Slovenia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Slovakia",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Iceland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Sweden",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Iceland",],
+                      data_EU_housingprices[data_EU_housingprices$Area == "Denmark",])
+
+
+
+data_EA_long <- data_EA_2012 %>%
+  pivot_longer(cols = starts_with("20"), names_to = "year", values_to = "price")
+
+data_EA_long$year <- as.numeric(data_EA_long$year)
+
+#char to num
+data_EA_long$price <- gsub("[^0-9.]", "", data_EA_long$price)
+data_EA_long$price <- as.numeric(data_EA_long$price)
+
+head(data_EA_long)
+
+data_2012 <- data_EA_long[data_EA_long$year == "2012",]
+
+
+```
+
+
+```{r}
+library(ggplot2)
+library(sf)
+library(rnaturalearth)
+library(rnaturalearthdata)
+
+world <- ne_countries(scale = "medium", returnclass = "sf")
+europe <- subset(world, continent == "Europe")
+
+europe_map_data <- merge(europe, data_2012, by.x = "name", by.y = "Area", all.x = TRUE)
+
+head(data_2012)
+xlim <- c(-10, 55)  
+ylim <- c(35, 85)   
+```
+
+
+```{r}
+map <- ggplot() +
+  geom_sf(data = europe_map_data, aes(fill = price)) +
+    scale_fill_viridis_c(option = "D", direction = -1, name = "price") + 
+  labs(title = "Heatmap of Housing prices in Europe") +
+  coord_sf(xlim = xlim, ylim = ylim) + theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "gray"),
+    panel.grid.minor = element_line(color = "gray"))
+
+map
+ggsave("heatmap 2012.png", plot = map, width = 15, height = 8, units = "in")
+
+```
+
+
+
+Ireland Housing Prices overtime
+
+```{r}
+
+
+data_Ireland_housingprices <- read_csv("Ireland housing prices 2005-2023 data.csv")
+head(data_Ireland_housingprices)
+
+
+data_long_Irelandhp <- data_Ireland_housingprices %>%
+  pivot_longer(cols = starts_with("20"), names_to = "year", values_to = "price")
+
+
+data_long_Irelandhp$year <- as.numeric(data_long_Irelandhp$year)
+data_long_Irelandhp$price <- as.numeric(data_long_Irelandhp$price)
+
+
+```
+
+```{r}
+#plot
+Ireland_graph <- ggplot(data_long_Irelandhp, aes(x = year, y = price)) +
+  geom_line(size = 1, color = "blue") +
+  labs(
+    title = "Housing Prices in Ireland Over Time",
+    x = "Year",
+    y = "Housing Price"
+  )  +
+     scale_y_continuous(breaks = seq(0,160, by = 20), limits = c(20, 160)) +
+     scale_x_continuous(breaks = seq(min(data_long_Irelandhp$year), max(data_long_Irelandhp$year), by = 1), limits = c(2005, 2023))  + 
+  theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "lightgray"),panel.grid.major.y = element_line(color = "lightgray"),axis.line = element_line(color = "black")) 
+
+Ireland_graph
+#ggsave("Ireland.png", plot = Ireland_graph, width = 15, height = 6, units = "in")
+```
+
+
+Ireland specifically
+
+```{r}
+
+data_Ireland <- read_csv("PPR.csv")
+head(data_Ireland)
+
+```
+
+```{r}
+data_Dublin <- data_Ireland[data_Ireland$County == "Dublin", ]
+data_Dublin <- subset(data_Dublin, select = -Eircode)
+data_Dublin <- subset(data_Dublin, select = -`Property Size Description`)
+head(data_Dublin)
+
+```
+
+
+```{r}
+is.na(data_Dublin)
+sum(is.na(data_Dublin))
+
+data_Dublin$Price <- iconv(data_Dublin$Price, from = "latin1", to = "UTF-8")
+ head(data_Dublin)
+data_Dublin$Price<- substr(data_Dublin$Price, 3, nchar(data_Dublin$Price))
+
+
+head(data_Dublin)
+```
+
+
+```{r}
+data_Dublin$Price <- gsub("[^0-9.]", "", data_Dublin$Price)
+
+#char to num
+data_Dublin$Price <- as.numeric(data_Dublin$Price)
+head(data_Dublin)
+
+```
+
+```{r}
+
+Q1 <- quantile(data_Dublin$Price, 0.25)
+Q3 <- quantile(data_Dublin$Price, 0.75)
+IQR <- Q3 - Q1
+
+cat("Q1:", Q1, "\n")
+cat("Q3:", Q3, "\n")
+cat("IQR:", IQR, "\n")
+
+#outliers Tukey´s Fences
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+
+outliers <- data_Dublin %>% filter(Price < lower_bound | Price > upper_bound)
+
+#remove Outliers
+df_cleaned <- data_Dublin %>% filter(Price >= lower_bound & Price <= upper_bound)
+
+head(df_cleaned)
+data_Dublin <- df_cleaned
+
+```
+
+
+```{r}
+
+library(lubridate)
+
+data_Dublin$`Date of Sale` <- as.Date(data_Dublin$`Date of Sale`, format = "%d/%m/%Y")
+#head(data_Dublin)
+str(data_Dublin$`Date of Sale`)
+
+data_Dublin<- data.frame(data_Dublin)
+
+print(str(data_Dublin))
+#print(names(data_Dublin))
+
+
+data_Dublin$Date.of.Sale <- as.Date(data_Dublin$Date.of.Sale, format = "%d/%m/%Y")
+
+data_Dublin$Year <- (ymd((data_Dublin$Date.of.Sale)))
+data_Dublin$Year <-format(data_Dublin$Year, format = '%Y')
+data_Dublin$Month <- (ymd((data_Dublin$Date.of.Sale)))
+data_Dublin$Month <-format(data_Dublin$Month, format = '%m')
+
+head(data_Dublin)
+```
+
+```{r}
+Dublin_average_prices_yearly <- data_Dublin %>%
+  group_by(Year) %>%
+  summarise(Average_Price = mean(Price))
+
+print(Dublin_average_prices_yearly)
+
+#head(Dublin_average_prices_yearly)
+```
+
+```{r}
+Dublin_average_prices_monthly <- data_Dublin %>%
+  group_by(Month) %>%
+  summarise(Average_Price = mean(Price))
+
+print(Dublin_average_prices_monthly)
+#head(Dublin_average_prices_monthly)
+```
+
+```{r}
+Dublin_average_prices <- data_Dublin %>%
+  group_by(Year, Month) %>%
+  summarise(Average_Price = mean(Price, na.rm = TRUE))
+
+print(Dublin_average_prices)
+#head(Dublin_average_prices)
+
+```
+
+```{r}
+Dublin_Prices_Overtime <- ggplot(data_Dublin, aes(x = data_Dublin$Date.of.Sale, y = Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  scale_y_continuous(labels = scales::comma) + 
+  labs(title = "Price Over Time",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme_minimal()        
+
+Dublin_Prices_Overtime
+#ggsave("Dublin_Prices.png", plot = Dublin_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+
+```{r}
+
+Year <- ggplot(Dublin_average_prices_yearly, aes(x = Dublin_average_prices_yearly$Year, y = Dublin_average_prices_yearly$Average_Price)) +
+  geom_line(color = "blue") +        
+  geom_point(color = "red") +         
+  scale_y_continuous(labels = scales::comma) + 
+  labs(title = "Dublin Average Yearly Price Over Time",     
+       x = "Date",                    
+       y = "Price") +                 
+theme(panel.background = element_rect(fill = "white"),
+      panel.grid.major = element_line(color = "lightgray"),
+      panel.grid.major.y = element_line(color = "lightgray"),
+      axis.line = element_line(color = "black"),
+      plot.title = element_text(size = 18),   
+      legend.title = element_text(size = 13),   
+      legend.text = element_text(size = 13))    
+
+Year
+ggsave("Dublin Average Yearly Price Over Time.png", plot = Year, width = 15, height = 8, units = "in")
+
+```
+
+```{r}
+Dublin_Average_Monthly_Price <- ggplot(Dublin_average_prices_monthly, aes(x = Dublin_average_prices_monthly$Month, y = Dublin_average_prices_monthly$Average_Price)) +
+  geom_line(color = "blue") +        
+  geom_point(color = "red") +         
+  scale_y_continuous(labels = scales::comma) + 
+  labs(title = "Dublin Average Monthly Price Over Time",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme_minimal()                     
+
+Dublin_Average_Monthly_Price
+```
+
+```{r}
+Av_Year <- ggplot(Dublin_average_prices, aes(x = Month, y = Average_Price, color = as.factor(Year), group = Year)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Average Monthly Prices per Year in Dublin",
+       x = "Month",
+       y = "Average Price",
+       color = "Year") +
+  #theme_minimal() +
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1))       
+  theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "lightgray"),panel.grid.major.y = element_line(color = "lightgray"),axis.line = element_line(color = "black")) 
+
+Av_Year
+#ggsave("Average Monthly Prices per Year in Dublin.png", plot = Av_Year, width = 15, height = 8, units = "in")
+
+
+
+Av_Month <- ggplot(Dublin_average_prices, aes(x = Year, y = Average_Price, color = as.factor(Month), group = Month)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Average Monthly Prices per Year in Dublin",
+       x = "Year",
+       y = "Average Price",
+       color = "Month") +
+  #theme_minimal() +
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1))    
+  theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "lightgray"),panel.grid.major.y = element_line(color = "lightgray"),axis.line = element_line(color = "black")) 
+
+Av_Month
+#ggsave("Average Monthly Prices per Year in Dublin.png", plot = Av_Month, width = 15, height = 8, units = "in")
+
+
+head(Dublin_average_prices)
+```
+
+```{r}
+head(Dublin_average_prices)
+head(data_Dublin)
+
+Dublin_average_prices <- Dublin_average_prices %>%
+  mutate(YearMonth = sprintf("%s-%s", Year, Month))
+
+
+Dublin_average_prices$Date <- (ym((Dublin_average_prices$YearMonth)))
+#Dublin_average_prices$Date <-format(Dublin_average_prices$Date, format = '%Y/%m')
+head(Dublin_average_prices)
+
+
+Month <- ggplot(Dublin_average_prices, aes(x = Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +        
+  geom_point(size=0.56) +
+  labs(title = "Average Monthly Prices per Year in Dublin",
+       x = "Year",
+       y = "Average Price") +
+   #scale_x_continuous(breaks = seq(min(2005), max(2023), by = 1), limits = c(2005, 2023))  + 
+    scale_x_date(date_labels = "%Y", date_breaks = "1 year") +
+  theme(panel.background = element_rect(fill = "white"),
+        panel.grid.major = element_line(color = "lightgray"),
+        panel.grid.major.y = element_line(color = "lightgray"),
+        axis.line = element_line(color = "black")
+        ) 
+
+Month
+ggsave("Month.png", plot = Month, width = 22, height = 10, units = "in")
+
+```
+
+```{r}
+head(Dublin_average_prices)
+
+#Dublin_average_prices
+Dublin_Prices_Overtime <- ggplot(Dublin_average_prices, aes(x = Dublin_average_prices$YearMonth, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  scale_y_continuous(labels = scales::comma) + 
+  labs(title = "Price Over Time",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme_minimal()        
+
+print(Dublin_Prices_Overtime)
+
+#ggsave("Dublin_Prices.png", plot = Dublin_Prices_Overtime, width = 15, height = 6, units = "in")
+
+
+```
+
+Cork information
+
+```{r}
+data_Cork <- data_Ireland[data_Ireland$County == "Cork", ]
+data_Cork <- subset(data_Cork, select = -Eircode)
+data_Cork <- subset(data_Cork, select = -`Property Size Description`)
+head(data_Cork)
+
+```
+
+
+```{r}
+is.na(data_Cork)
+sum(is.na(data_Cork))
+
+data_Cork$Price <- iconv(data_Cork$Price, from = "latin1", to = "UTF-8")
+ head(data_Cork)
+data_Cork$Price<- substr(data_Cork$Price, 3, nchar(data_Cork$Price))
+
+
+head(data_Cork)
+```
+
+
+```{r}
+data_Cork$Price <- gsub("[^0-9.]", "", data_Cork$Price)
+
+
+data_Cork$Price <- as.numeric(data_Cork$Price)
+head(data_Cork)
+
+```
+
+```{r}
+
+Q1 <- quantile(data_Cork$Price, 0.25)
+Q3 <- quantile(data_Cork$Price, 0.75)
+IQR <- Q3 - Q1
+
+
+cat("Q1:", Q1, "\n")
+cat("Q3:", Q3, "\n")
+cat("IQR:", IQR, "\n")
+
+#outliers Tukey´s Fences
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+
+outliers <- data_Cork %>% filter(Price < lower_bound | Price > upper_bound)
+
+#remove Outliers
+df_cleaned <- data_Cork %>% filter(Price >= lower_bound & Price <= upper_bound)
+
+
+head(df_cleaned)
+data_Cork <- df_cleaned
+```
+
+```{r}
+
+library(lubridate)
+
+data_Cork$`Date of Sale` <- as.Date(data_Cork$`Date of Sale`, format = "%d/%m/%Y")
+#head(data_Cork)
+str(data_Cork$`Date of Sale`)
+
+data_Cork<- data.frame(data_Cork)
+
+print(str(data_Cork))
+#print(names(data_Cork))
+
+data_Cork$Date.of.Sale <- as.Date(data_Cork$Date.of.Sale, format = "%d/%m/%Y")
+
+data_Cork$Year <- (ymd((data_Cork$Date.of.Sale)))
+data_Cork$Year <-format(data_Cork$Year, format = '%Y')
+data_Cork$Month <- (ymd((data_Cork$Date.of.Sale)))
+data_Cork$Month <-format(data_Cork$Month, format = '%m')
+
+head(data_Cork)
+```
+
+```{r}
+Cork_average_prices_yearly <- data_Cork %>%
+  group_by(Year) %>%
+  summarise(Average_Price = mean(Price))
+
+print(Cork_average_prices_yearly)
+#head(Cork_average_prices_yearly)
+```
+
+```{r}
+Cork_average_prices_monthly <- data_Cork %>%
+  group_by(Month) %>%
+  summarise(Average_Price = mean(Price))
+
+print(Cork_average_prices_monthly)
+#head(Cork_average_prices_monthly)
+```
+
+```{r}
+Cork_average_prices <- data_Cork %>%
+  group_by(Year, Month) %>%
+  summarise(Average_Price = mean(Price, na.rm = TRUE))
+
+print(Cork_average_prices)
+#head(Cork_average_prices)
+
+```
+
+```{r}
+Cork_Prices_Overtime <- ggplot(data_Cork, aes(x = data_Cork$Date.of.Sale, y = Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  scale_y_continuous(labels = scales::comma) + 
+  labs(title = "Price Over Time",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme_minimal()        
+
+print(Cork_Prices_Overtime)
+
+#ggsave("Cork_Prices.png", plot = Cork_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+
+```{r}
+Year <- ggplot(Cork_average_prices_yearly, aes(x = Cork_average_prices_yearly$Year, y = Cork_average_prices_yearly$Average_Price)) +
+  geom_line(color = "blue") +        
+  geom_point(color = "red") +         
+  scale_y_continuous(labels = scales::comma) + 
+  labs(title = "Cork Average Yearly Price Over Time",     
+       x = "Date",                    
+       y = "Price") +                 
+theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "lightgray"),panel.grid.major.y = element_line(color = "lightgray"),axis.line = element_line(color = "black")) 
+
+print(Year)
+
+#ggsave("Cork_yearly.png", plot = Year, width = 15, height = 8, units = "in")
+
+```
+
+```{r}
+ggplot(Cork_average_prices_monthly, aes(x = Cork_average_prices_monthly$Month, y = Cork_average_prices_monthly$Average_Price)) +
+  geom_line(color = "blue") +        
+  geom_point(color = "red") +         
+  scale_y_continuous(labels = scales::comma) + 
+  labs(title = "Cork Average Monthly Price Over Time",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme_minimal()                     
+
+```
+
+```{r}
+Av_Year <- ggplot(Cork_average_prices, aes(x = Month, y = Average_Price, color = as.factor(Year), group = Year)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Average Monthly Prices per Year in Cork",
+       x = "Month",
+       y = "Average Price",
+       color = "Year") +
+  #theme_minimal() +
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1))       
+  theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "lightgray"),panel.grid.major.y = element_line(color = "lightgray"),axis.line = element_line(color = "black")) 
+
+print(Av_Year)
+
+#ggsave("Cork Average Yearly Prices per Year.png", plot = Av_Year, width = 15, height = 8, units = "in")
+
+
+Av_Month <- ggplot(Cork_average_prices, aes(x = Year, y = Average_Price, color = as.factor(Month), group = Month)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Average Monthly Prices per Year in Cork",
+       x = "Year",
+       y = "Average Price",
+       color = "Month") +
+  #theme_minimal() +
+  #theme(axis.text.x = element_text(angle = 45, hjust = 1))    
+  theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "lightgray"),panel.grid.major.y = element_line(color = "lightgray"),axis.line = element_line(color = "black")) 
+
+print(Av_Month)
+
+#ggsave("Cork Average Monthly Prices per Year.png", plot = Av_Month, width = 15, height = 8, units = "in")
+
+
+#head(Cork_average_prices)
+```
+
+```{r}
+head(Cork_average_prices)
+head(data_Cork)
+
+Cork_average_prices <- Cork_average_prices %>%
+  mutate(YearMonth = sprintf("%s-%s", Year, Month))
+
+
+Cork_average_prices$Date <- (ym((Cork_average_prices$YearMonth)))
+#Cork_average_prices$Date <-format(Cork_average_prices$Date, format = '%Y/%m')
+head(Cork_average_prices)
+
+
+Month <- ggplot(Cork_average_prices, aes(x = Cork_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +        
+  geom_point(size=0.56) +
+  labs(title = "Average Monthly Prices per Year in Cork",
+       x = "Year",
+       y = "Average Price") +
+   #scale_x_continuous(breaks = seq(min(2005), max(2023), by = 1), limits = c(2005, 2023))  + 
+    scale_x_date(date_labels = "%Y", date_breaks = "1 year") +
+  theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "lightgray"),panel.grid.major.y = element_line(color = "lightgray"),axis.line = element_line(color = "black")) 
+
+print(Month)
+
+#ggsave("Cork-Month.png", plot = Month, width = 22, height = 10, units = "in")
+```
+
+```{r}
+head(Cork_average_prices)
+
+#Cork_average_prices
+Cork_Prices_Overtime <- ggplot(Cork_average_prices, aes(x = Cork_average_prices$YearMonth, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  scale_y_continuous(labels = scales::comma) + 
+  labs(title = "Price Over Time",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme_minimal()        
+
+print(Cork_Prices_Overtime)
+
+#ggsave("Cork_Prices.png", plot = Cork_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+```{r}
+
+data_Glasgow <- read_csv("glasgow.csv")
+head(data_Glasgow)
+data.frame(data_Glasgow)
+```
+
+```{r}
+
+data_Glasgow <- subset(data_Glasgow, select = -Name)
+
+is.na(data_Glasgow)
+sum(is.na(data_Glasgow))
+
+data_Glasgow$Price <- iconv(data_Glasgow$Price, from = "latin1", to = "UTF-8")
+ head(data_Glasgow)
+data_Glasgow$Price<- substr(data_Glasgow$Price, 3, nchar(data_Glasgow$Price))
+
+
+head(data_Glasgow$Price)
+```
+
+
+```{r}
+data_Glasgow$Price <- gsub("[^0-9.]", "", data_Glasgow$Price)
+
+#char to num
+data_Glasgow$Price <- as.numeric(data_Glasgow$Price)
+head(data_Glasgow)
+str(data_Glasgow)
+class(data_Glasgow$Price)
+
+```
+
+
+
+```{r}
+library(lubridate)
+
+data_Glasgow$DateDateDate <- as.Date(data_Glasgow$Date, format = "%d/%m/%Y")
+
+str(data_Glasgow$DateDateDate)
+head(data_Glasgow)
+
+data_Glasgow$Date <- data_Glasgow$DateDateDate
+head(data_Glasgow)
+
+
+```
+Number of Properties of Dublin
+```{r}
+head(Dublin_average_prices)
+head(data_Dublin)
+
+Dublin_properties_per_month <- data_Dublin %>%
+  group_by(Year, Month) %>%
+  summarise(Count = n())
+
+Dublin_properties_per_month$NumProperties <- Dublin_properties_per_month$Count
+Dublin_properties_per_month$YearMonth <- cbind(Dublin_properties_per_month$Year,Dublin_properties_per_month$Month)
+
+Dublin_properties_per_month <- Dublin_properties_per_month %>%
+  mutate(YearMonth = sprintf("%s-%s", Year, Month))
+
+
+Dublin_properties_per_month$Date <- (ym((Dublin_properties_per_month$YearMonth)))
+
+head(Dublin_average_prices)
+print(Dublin_properties_per_month)
+```
+
+
+
+```{r}
+Dublin_properties_graph <- ggplot(Dublin_properties_per_month, aes(x = Dublin_properties_per_month$Date, y = NumProperties)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +  
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "6 months",  
+               limits = as.Date(c("2010-01-01", "2023-12-01"))) + 
+  labs(title = "Number of Properties in Dublin Over Time",
+       x = "Year",
+       y = "Number of Properties Monthly"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 11),   
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 15),   
+    axis.title.y = element_text(size = 15),    
+    plot.title = element_text(size = 23),   
+    legend.title = element_text(size = 17),   
+    legend.text = element_text(size = 17)   
+    )
+
+#save plot png
+ggsave("Number of Properties in Dublin Over Time.png", plot = Dublin_properties_graph, width = 15, height = 7, units = "in") 
+
+
+print(Dublin_properties_graph)
+```
+
+Number of Properties Cork
+```{r}
+head(Cork_average_prices)
+head(data_Cork)
+
+Cork_properties_per_month <- data_Cork %>%
+  group_by(Year, Month) %>%
+  summarise(Count = n())
+
+Cork_properties_per_month$NumProperties <- Cork_properties_per_month$Count
+Cork_properties_per_month$YearMonth <- cbind(Cork_properties_per_month$Year,Cork_properties_per_month$Month)
+
+Cork_properties_per_month <- Cork_properties_per_month %>%
+  mutate(YearMonth = sprintf("%s-%s", Year, Month))
+
+
+Cork_properties_per_month$Date <- (ym((Cork_properties_per_month$YearMonth)))
+
+head(Cork_average_prices)
+print(Cork_properties_per_month)
+```
+
+```{r}
+Cork_properties_graph <- ggplot(Cork_properties_per_month, aes(x = Cork_properties_per_month$Date, y = NumProperties)) +
+  geom_line(color = "blue") +
+  geom_point(color = "red") +  
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "6 months",  
+               limits = as.Date(c("2010-01-01", "2023-12-01"))) + 
+  labs(title = "Number of Properties in Cork Over Time",
+       x = "Year",
+       y = "Number of Properties Monthly"
+  ) +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 11),   
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 15),   
+    axis.title.y = element_text(size = 15),    
+    plot.title = element_text(size = 23),   
+    legend.title = element_text(size = 17),   
+    legend.text = element_text(size = 17)   
+    )
+
+#save plot png
+ggsave("Number of Properties in Cork Over Time.png", plot = Cork_properties_graph, width = 15, height = 7, units = "in") 
+
+
+print(Cork_properties_graph)
+```
+
+Standarizing 
+
+Standarizing Glasgow
+```{r}
+X_data_Glasgow <- data_Glasgow
+X_data_Glasgow$Price <- as.numeric(X_data_Glasgow$Price)
+
+head(X_data_Glasgow)
+
+X_data_Glasgow$Price <- scale(X_data_Glasgow$Price)
+
+head(X_data_Glasgow)
+summary(X_data_Glasgow)
+
+```
+Standarizing Dublin
+```{r}
+X_Dublin_average_prices <- Dublin_average_prices
+X_Dublin_average_prices$Average_Price <- as.numeric(X_Dublin_average_prices$Average_Price)
+
+head(X_Dublin_average_prices)
+
+X_Dublin_average_prices$Average_Price <- scale(X_Dublin_average_prices$Average_Price)
+
+head(X_Dublin_average_prices)
+summary(X_Dublin_average_prices)
+
+```
+
+Standarizing Cork
+```{r}
+X_Cork_average_prices <- Cork_average_prices
+X_Cork_average_prices$Average_Price <- as.numeric(X_Cork_average_prices$Average_Price)
+
+head(X_Cork_average_prices)
+
+X_Cork_average_prices$Average_Price <- scale(X_Cork_average_prices$Average_Price)
+
+head(X_Cork_average_prices)
+summary(X_Cork_average_prices)
+
+```
+
+Modelling them
+
+Cork ITS, ARIMA and GBM model in RPZ, REITS and BREXIT
+```{r}
+library(forecast)
+library(gbm)
+library(ggplot2)
+library(dplyr)
+
+ 
+# X_Cork_average_prices <- read.csv("X_Cork_average_prices.csv")
+
+#Date to date
+X_Cork_average_prices$Date <- as.Date(X_Cork_average_prices$Date, format="%Y-%m-%d")
+
+
+fit_and_forecast <- function(train_data, test_data, title_suffix) {
+  
+  ts_train <- ts(train_data$Average_Price, start=c(as.numeric(format(min(train_data$Date), "%Y")), as.numeric(format(min(train_data$Date), "%m"))), frequency=12)
+  
+  #ARIMA model
+  arima_model <- auto.arima(ts_train)
+  arima_forecast <- forecast(arima_model, h=length(test_data$Average_Price))
+  arima_forecast_values <- data.frame(
+    Date = test_data$Date,
+    Forecast = arima_forecast$mean
+  )
+  
+  #model & accuracy
+  print(paste("ARIMA Model Summary for", title_suffix))
+  print(summary(arima_model))
+  arima_mae <- mean(abs(arima_forecast$mean - test_data$Average_Price))
+  arima_mse <- mean((arima_forecast$mean - test_data$Average_Price)^2)
+  print(paste("ARIMA MAE for", title_suffix, ":", arima_mae))
+  print(paste("ARIMA MSE for", title_suffix, ":", arima_mse))
+  
+  #GB
+  train_data_gbm <- train_data
+  train_data_gbm$Date <- as.numeric(train_data_gbm$Date)
+  test_data_gbm <- test_data
+  test_data_gbm$Date <- as.numeric(test_data_gbm$Date)
+  
+  #no NA
+  train_data_gbm <- na.omit(train_data_gbm)
+  test_data_gbm <- na.omit(test_data_gbm)
+  
+  #GBM
+  set.seed(123)
+  gbm_model <- gbm(
+    Average_Price ~ Date,
+    data = train_data_gbm,
+    distribution = "gaussian",
+    n.trees = 500,
+    interaction.depth = 3,
+    shrinkage = 0.01,
+    cv.folds = 5,
+    n.minobsinnode = 5,
+    bag.fraction = 0.5
+  )
+  
+  #GBM forecast
+  n.trees_opt <- gbm.perf(gbm_model, method="cv")
+  gbm_forecast <- predict(gbm_model, newdata=test_data_gbm, n.trees=n.trees_opt)
+  test_data$gbm_forecast <- gbm_forecast
+  gbm_forecast_values <- data.frame(
+    Date = test_data$Date,
+    Forecast = test_data$gbm_forecast
+  )
+  
+  #print GBM 
+  print(paste("GBM Model Summary for", title_suffix))
+  print(summary(gbm_model))
+  gbm_mae <- mean(abs(test_data$gbm_forecast - test_data$Average_Price))
+  gbm_mse <- mean((test_data$gbm_forecast - test_data$Average_Price)^2)
+  print(paste("GBM MAE for", title_suffix, ":", gbm_mae))
+  print(paste("GBM MSE for", title_suffix, ":", gbm_mse))
+  
+  list(arima_forecast_values=arima_forecast_values, gbm_forecast_values=gbm_forecast_values)
+}
+
+
+create_plot <- function(event_date, title_suffix) {
+  start_date <- as.Date(event_date) %m-% months(36)
+  end_date <- as.Date(event_date) %m+% months(37)
+  
+  filtered_data <- subset(X_Cork_average_prices, Date >= start_date & Date <= end_date)
+  
+  train_data <- subset(filtered_data, Date < as.Date(event_date))
+  test_data <- subset(filtered_data, Date >= as.Date(event_date))
+  
+  forecasts <- fit_and_forecast(train_data, test_data, title_suffix)
+  arima_forecast_values <- forecasts$arima_forecast_values
+  gbm_forecast_values <- forecasts$gbm_forecast_values
+  
+  plot <- ggplot(filtered_data, aes(x = Date, y = Average_Price, color = "Reality")) +
+    geom_line() +
+    geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #Reality
+    geom_smooth(method = "lm", aes(color = "Trend"), se = FALSE) + #trend
+    geom_line(data = arima_forecast_values, aes(x = Date, y = Forecast, color = "Arima Model"), linetype = "dashed", size = 0.842) + #arima
+    geom_line(data = gbm_forecast_values, aes(x = Date, y = Forecast, color = "GBM Model"), linetype = "dashed", size = 0.842) + #gbm
+    scale_color_manual(values = c("Reality" = "blue","Trend" = "red", "Arima Model" = "purple", "GBM Model" = "green"),
+                       labels = c("Reality" = "Reality","Trend" = "Trend", "Arima Model" = "Arima Model", "GBM Model" = "GBM Model")) +
+    scale_y_continuous(labels = scales::comma) +
+    scale_x_date(date_labels = "%b-%Y", date_breaks = "month", limits = as.Date(c(start_date, end_date))) +
+    labs(title = paste("Cork Price Over Time During", title_suffix, "with ARIMA and GBM Forecasts"),
+         x = "Date",
+         y = "Housing Price",
+         color = "Legend") +
+    theme(
+      panel.background = element_rect(fill = "white"),
+      panel.grid.major = element_line(color = "lightgray"),
+      panel.grid.major.y = element_line(color = "lightgray"),
+      axis.line = element_line(color = "black"),
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    axis.title.x = element_text(size = 12),   
+    axis.title.y = element_text(size = 12),    
+    plot.title = element_text(size = 20),   
+    legend.title = element_text(size = 15),   
+    legend.text = element_text(size = 15)   
+    ) +
+    geom_vline(xintercept = as.numeric(as.Date(event_date)), linetype = "dashed", color = "red")
+
+  
+  ggsave(paste0("Cork_Prices_", gsub(" ", "_", title_suffix), "_with_ARIMA_GBM.png"), plot = plot, width = 14, height = 6, units = "in")
+  print(plot)
+}
+
+#interventions events
+events <- data.frame(
+  Date = c("2013-01-01", "2016-12-01", "2020-01-01"),
+  Title = c("REITs Introduction", "RPZ Introduction", "Brexit")
+)
+
+#plot
+for (i in 1:nrow(events)) {
+  create_plot(events$Date[i], events$Title[i])
+}
+
+```
+
+
+
+Dublin ITS, ARIMA and GBM model in RPZ, REITS and BREXIT
+
+```{r}
+library(forecast)
+library(gbm)
+library(ggplot2)
+library(dplyr)
+
+ 
+# X_Dublin_average_prices <- read.csv("X_Dublin_average_prices.csv")
+
+#Date to date
+X_Dublin_average_prices$Date <- as.Date(X_Dublin_average_prices$Date, format="%Y-%m-%d")
+
+
+fit_and_forecast <- function(train_data, test_data, title_suffix) {
+  
+  ts_train <- ts(train_data$Average_Price, start=c(as.numeric(format(min(train_data$Date), "%Y")), as.numeric(format(min(train_data$Date), "%m"))), frequency=12)
+  
+  #ARIMA model
+  arima_model <- auto.arima(ts_train)
+  arima_forecast <- forecast(arima_model, h=length(test_data$Average_Price))
+  arima_forecast_values <- data.frame(
+    Date = test_data$Date,
+    Forecast = arima_forecast$mean
+  )
+  
+  #model & accuracy
+  print(paste("ARIMA Model Summary for", title_suffix))
+  print(summary(arima_model))
+  arima_mae <- mean(abs(arima_forecast$mean - test_data$Average_Price))
+  arima_mse <- mean((arima_forecast$mean - test_data$Average_Price)^2)
+  print(paste("ARIMA MAE for", title_suffix, ":", arima_mae))
+  print(paste("ARIMA MSE for", title_suffix, ":", arima_mse))
+  
+  #GB
+  train_data_gbm <- train_data
+  train_data_gbm$Date <- as.numeric(train_data_gbm$Date)
+  test_data_gbm <- test_data
+  test_data_gbm$Date <- as.numeric(test_data_gbm$Date)
+  
+  #no NA
+  train_data_gbm <- na.omit(train_data_gbm)
+  test_data_gbm <- na.omit(test_data_gbm)
+  
+  #GBM
+  set.seed(123)
+  gbm_model <- gbm(
+    Average_Price ~ Date,
+    data = train_data_gbm,
+    distribution = "gaussian",
+    n.trees = 500,
+    interaction.depth = 3,
+    shrinkage = 0.01,
+    cv.folds = 5,
+    n.minobsinnode = 5,
+    bag.fraction = 0.5
+  )
+  
+  #GBM forecast
+  n.trees_opt <- gbm.perf(gbm_model, method="cv")
+  gbm_forecast <- predict(gbm_model, newdata=test_data_gbm, n.trees=n.trees_opt)
+  test_data$gbm_forecast <- gbm_forecast
+  gbm_forecast_values <- data.frame(
+    Date = test_data$Date,
+    Forecast = test_data$gbm_forecast
+  )
+  
+  #print GBM 
+  print(paste("GBM Model Summary for", title_suffix))
+  print(summary(gbm_model))
+  gbm_mae <- mean(abs(test_data$gbm_forecast - test_data$Average_Price))
+  gbm_mse <- mean((test_data$gbm_forecast - test_data$Average_Price)^2)
+  print(paste("GBM MAE for", title_suffix, ":", gbm_mae))
+  print(paste("GBM MSE for", title_suffix, ":", gbm_mse))
+  
+  list(arima_forecast_values=arima_forecast_values, gbm_forecast_values=gbm_forecast_values)
+}
+
+
+create_plot <- function(event_date, title_suffix) {
+  start_date <- as.Date(event_date) %m-% months(36)
+  end_date <- as.Date(event_date) %m+% months(37)
+  
+  filtered_data <- subset(X_Dublin_average_prices, Date >= start_date & Date <= end_date)
+  
+  train_data <- subset(filtered_data, Date < as.Date(event_date))
+  test_data <- subset(filtered_data, Date >= as.Date(event_date))
+  
+  forecasts <- fit_and_forecast(train_data, test_data, title_suffix)
+  arima_forecast_values <- forecasts$arima_forecast_values
+  gbm_forecast_values <- forecasts$gbm_forecast_values
+  
+  plot <- ggplot(filtered_data, aes(x = Date, y = Average_Price, color = "Reality")) +
+    geom_line() +
+    geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #Reality
+    geom_smooth(method = "lm", aes(color = "Trend"), se = FALSE) + #trend
+    geom_line(data = arima_forecast_values, aes(x = Date, y = Forecast, color = "Arima Model"), linetype = "dashed", size = 0.842) + #arima
+    geom_line(data = gbm_forecast_values, aes(x = Date, y = Forecast, color = "GBM Model"), linetype = "dashed", size = 0.842) + #gbm
+    scale_color_manual(values = c("Reality" = "blue","Trend" = "red", "Arima Model" = "purple", "GBM Model" = "green"),
+                       labels = c("Reality" = "Reality","Trend" = "Trend", "Arima Model" = "Arima Model", "GBM Model" = "GBM Model")) +
+    scale_y_continuous(labels = scales::comma) +
+    scale_x_date(date_labels = "%b-%Y", date_breaks = "month", limits = as.Date(c(start_date, end_date))) +
+    labs(title = paste("Dublin Price Over Time During", title_suffix, "with ARIMA and GBM Forecasts"),
+         x = "Date",
+         y = "Housing Price",
+         color = "Legend") +
+    theme(
+      panel.background = element_rect(fill = "white"),
+      panel.grid.major = element_line(color = "lightgray"),
+      panel.grid.major.y = element_line(color = "lightgray"),
+      axis.line = element_line(color = "black"),
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+     # plot.title = element_text(size = 18),   
+    #legend.title = element_text(size = 13),   
+    #legend.text = element_text(size = 13)   
+    axis.title.x = element_text(size = 12),   
+    axis.title.y = element_text(size = 12),    
+    plot.title = element_text(size = 20),   
+    legend.title = element_text(size = 15),   
+    legend.text = element_text(size = 15)   
+    ) +
+    geom_vline(xintercept = as.numeric(as.Date(event_date)), linetype = "dashed", color = "red")
+
+  ggsave(paste0("Dublin_Prices_", gsub(" ", "_", title_suffix), "_with_ARIMA_GBM.png"), plot = plot, width = 14, height = 6, units = "in")
+         #, width = 18, height = 7, units = "in")
+  print(plot)
+}
+ 
+#interventions events
+events <- data.frame(
+  Date = c("2013-01-01", "2016-12-01", "2020-01-01"),
+  Title = c("REITs Introduction", "RPZ Introduction", "Brexit")
+)
+
+#plot
+for (i in 1:nrow(events)) {
+  create_plot(events$Date[i], events$Title[i])
+}
+
+```
+
+Glasgow ITS, ARIMA and GBM model in RPZ, REITS and BREXIT
+
+```{r}
+library(forecast)
+library(gbm)
+library(ggplot2)
+library(dplyr)
+
+ 
+# X_data_Glasgow <- read.csv("X_data_Glasgow.csv")
+
+#Date to date
+X_data_Glasgow$Date <- as.Date(X_data_Glasgow$Date, format="%Y-%m-%d")
+
+
+fit_and_forecast <- function(train_data, test_data, title_suffix) {
+  
+  ts_train <- ts(train_data$Price, start=c(as.numeric(format(min(train_data$Date), "%Y")), as.numeric(format(min(train_data$Date), "%m"))), frequency=12)
+  
+  #ARIMA model
+  arima_model <- auto.arima(ts_train)
+  arima_forecast <- forecast(arima_model, h=length(test_data$Price))
+  arima_forecast_values <- data.frame(
+    Date = test_data$Date,
+    Forecast = arima_forecast$mean
+  )
+  
+  #model & accuracy
+  print(paste("ARIMA Model Summary for", title_suffix))
+  print(summary(arima_model))
+  arima_mae <- mean(abs(arima_forecast$mean - test_data$Price))
+  arima_mse <- mean((arima_forecast$mean - test_data$Price)^2)
+  print(paste("ARIMA MAE for", title_suffix, ":", arima_mae))
+  print(paste("ARIMA MSE for", title_suffix, ":", arima_mse))
+  
+  #GB
+  train_data_gbm <- train_data
+  train_data_gbm$Date <- as.numeric(train_data_gbm$Date)
+  test_data_gbm <- test_data
+  test_data_gbm$Date <- as.numeric(test_data_gbm$Date)
+  
+  #no NA
+  train_data_gbm <- na.omit(train_data_gbm)
+  test_data_gbm <- na.omit(test_data_gbm)
+  
+  #GBM
+  set.seed(123)
+  gbm_model <- gbm(
+    Price ~ Date,
+    data = train_data_gbm,
+    distribution = "gaussian",
+    n.trees = 500,
+    interaction.depth = 3,
+    shrinkage = 0.01,
+    cv.folds = 5,
+    n.minobsinnode = 5,
+    bag.fraction = 0.5
+  )
+  
+  #GBM forecast
+  n.trees_opt <- gbm.perf(gbm_model, method="cv")
+  gbm_forecast <- predict(gbm_model, newdata=test_data_gbm, n.trees=n.trees_opt)
+  test_data$gbm_forecast <- gbm_forecast
+  gbm_forecast_values <- data.frame(
+    Date = test_data$Date,
+    Forecast = test_data$gbm_forecast
+  )
+  
+  #print GBM 
+  print(paste("GBM Model Summary for", title_suffix))
+  print(summary(gbm_model))
+  gbm_mae <- mean(abs(test_data$gbm_forecast - test_data$Price))
+  gbm_mse <- mean((test_data$gbm_forecast - test_data$Price)^2)
+  print(paste("GBM MAE for", title_suffix, ":", gbm_mae))
+  print(paste("GBM MSE for", title_suffix, ":", gbm_mse))
+  
+  list(arima_forecast_values=arima_forecast_values, gbm_forecast_values=gbm_forecast_values)
+}
+
+
+create_plot <- function(event_date, title_suffix) {
+  start_date <- as.Date(event_date) %m-% months(36)
+  end_date <- as.Date(event_date) %m+% months(37)
+  
+  filtered_data <- subset(X_data_Glasgow, Date >= start_date & Date <= end_date)
+  
+  train_data <- subset(filtered_data, Date < as.Date(event_date))
+  test_data <- subset(filtered_data, Date >= as.Date(event_date))
+  
+  forecasts <- fit_and_forecast(train_data, test_data, title_suffix)
+  arima_forecast_values <- forecasts$arima_forecast_values
+  gbm_forecast_values <- forecasts$gbm_forecast_values
+  
+  plot <- ggplot(filtered_data, aes(x = Date, y = Price, color = "Reality")) +
+    geom_line() +
+    geom_hline(aes(yintercept = mean(Price)), color = "blue", linetype = "dashed") + #Reality
+    geom_smooth(method = "lm", aes(color = "Trend"), se = FALSE) + #trend
+    geom_line(data = arima_forecast_values, aes(x = Date, y = Forecast, color = "Arima Model"), linetype = "dashed", size = 0.842) + #arima
+    geom_line(data = gbm_forecast_values, aes(x = Date, y = Forecast, color = "GBM Model"), linetype = "dashed", size = 0.842) + #gbm
+    scale_color_manual(values = c("Reality" = "blue","Trend" = "red", "Arima Model" = "purple", "GBM Model" = "green"),
+                       labels = c("Reality" = "Reality","Trend" = "Trend", "Arima Model" = "Arima Model", "GBM Model" = "GBM Model")) +
+    scale_y_continuous(labels = scales::comma) +
+    scale_x_date(date_labels = "%b-%Y", date_breaks = "month", limits = as.Date(c(start_date, end_date))) +
+    labs(title = paste("Glasgow Price Over Time During", title_suffix, "with ARIMA and GBM Forecasts"),
+         x = "Date",
+         y = "Housing Price",
+         color = "Legend") +
+    theme(
+      panel.background = element_rect(fill = "white"),
+      panel.grid.major = element_line(color = "lightgray"),
+      panel.grid.major.y = element_line(color = "lightgray"),
+      axis.line = element_line(color = "black"),
+      axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    axis.title.x = element_text(size = 12),   
+    axis.title.y = element_text(size = 12),    
+    plot.title = element_text(size = 20),   
+    legend.title = element_text(size = 15),   
+    legend.text = element_text(size = 15)   
+    ) +
+    geom_vline(xintercept = as.numeric(as.Date(event_date)), linetype = "dashed", color = "red")
+
+  
+  ggsave(paste0("Glasgow_Prices_", gsub(" ", "_", title_suffix), "_with_ARIMA_GBM.png"), plot = plot, width = 14, height = 6, units = "in")
+  print(plot)
+}
+
+#interventions events
+events <- data.frame(
+  Date = c("2013-01-01", "2016-12-01", "2020-01-01"),
+  Title = c("REITs Introduction", "RPZ Introduction", "Brexit")
+)
+
+#plot
+for (i in 1:nrow(events)) {
+  create_plot(events$Date[i], events$Title[i])
+}
+
+```
+
+Graphs
+
+Brexit
+
+In Dublin
+```{r}
+head(Dublin_average_prices)
+
+#Dublin_average_prices
+Dublin_Prices_Overtime <- ggplot(Dublin_average_prices, aes(x = Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +      
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2017-01-01", "2023-01-01"))) +   #limits Jan 2017 to Jan 2020
+  labs(title = "Dublin Price Over Time During Brexit",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+#axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 12),   
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 15),   
+    axis.title.y = element_text(size = 15),    
+    plot.title = element_text(size = 22),   
+    legend.title = element_text(size = 17),   
+    legend.text = element_text(size = 17)   
+)
+Brexit <- as.Date("2020-01-01")
+ 
+Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(Brexit), linetype = "dashed", color = "red")
+#print(Dublin_Prices_Overtime)
+
+ggsave("Dublin_Prices_Brexit_not_standarized.png", plot = Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(Brexit), linetype = "dashed", color = "red"), width = 14, height = 7, units = "in") 
+
+```
+
+In Glasgow
+
+```{r}
+head(data_Glasgow)
+
+#Glasgow_average_prices
+Glasgow_Prices_Overtime <- ggplot(data_Glasgow, aes(x = data_Glasgow$Date, y = Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +  
+  geom_hline(aes(yintercept = mean(Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2017-01-01", "2023-01-01"))) +   #limits Jan 2017 to Jan 2020
+  labs(title = "Glasgow Price Over Time During Brexit",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+#axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 12),   
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 15),   
+    axis.title.y = element_text(size = 15),    
+    plot.title = element_text(size = 22),   
+    legend.title = element_text(size = 17),   
+    legend.text = element_text(size = 17)   
+)
+
+Brexit <- as.Date("2020-01-01")
+ 
+Glasgow_Prices_Overtime + geom_vline(xintercept = as.numeric(Brexit), linetype = "dashed", color = "red")
+#print(Dublin_Prices_Overtime)
+
+#print(Glasgow_Prices_Overtime)
+
+ggsave("Glasgow_Prices_Brexit_not_standarized.png", plot = Glasgow_Prices_Overtime + geom_vline(xintercept = as.numeric(Brexit), linetype = "dashed", color = "red"), width = 14, height = 7, units = "in") 
+
+```
+RPZ
+
+In Dublin
+
+```{r}
+head(Dublin_average_prices)
+
+#Dublin_average_prices
+Dublin_Prices_Overtime <- ggplot(Dublin_average_prices, aes(x = Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2013-12-01", "2019-12-31"))) +  
+  labs(title = "Dublin Price Over Time During RPZ",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+#axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 12),   
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 15),   
+    axis.title.y = element_text(size = 15),    
+    plot.title = element_text(size = 22),   
+    legend.title = element_text(size = 17),   
+    legend.text = element_text(size = 17)   
+)
+
+RPZ <- as.Date("2016-12-01")
+ 
+Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(RPZ), linetype = "dashed", color = "red")
+#print(Dublin_Prices_Overtime)
+
+ggsave("Dublin_Prices_RPZ_not_standarized.png", plot = Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(RPZ), linetype = "dashed", color = "red"), width = 14, height = 7, units = "in") 
+
+```
+
+In Cork
+
+```{r}
+head(Cork_average_prices)
+
+#Cork_average_prices
+Cork_Prices_Overtime <- ggplot(Cork_average_prices, aes(x = Cork_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +  
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2013-12-01", "2019-12-31"))) +  
+  labs(title = "Cork Price Over Time During RPZ",     
+       x = "Date",                    
+       y = "Price") +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+#axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 12),   
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 15),   
+    axis.title.y = element_text(size = 15),    
+    plot.title = element_text(size = 22),   
+    legend.title = element_text(size = 17),   
+    legend.text = element_text(size = 17)   
+)
+
+RPZ <- as.Date("2016-12-01")
+ 
+Cork_Prices_Overtime + geom_vline(xintercept = as.numeric(RPZ), linetype = "dashed", color = "red")
+#print(Cork_Prices_Overtime)
+
+
+ggsave("Cork Prices RPZ_not_standarized.png", plot = Cork_Prices_Overtime + geom_vline(xintercept = as.numeric(RPZ), linetype = "dashed", color = "red"), width = 14, height = 7, units = "in") 
+```
+
+Irish REITs
+
+In Dublin
+
+```{r}
+head(Dublin_average_prices)
+
+#Dublin_average_prices
+Dublin_Prices_Overtime <- ggplot(Dublin_average_prices, aes(x = Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") + 
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2010-12-01", "2016-12-31"))) +  
+  labs(title = "Dublin Price Over Time During Irish REITs",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+    #axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 12),   
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 15),   
+    axis.title.y = element_text(size = 15),    
+    plot.title = element_text(size = 22),   
+    legend.title = element_text(size = 17),   
+    legend.text = element_text(size = 17)   
+  )
+
+REITs <- as.Date("2013-12-01")
+ 
+Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(REITs), linetype = "dashed", color = "red")
+#print(Dublin_Prices_Overtime)
+ 
+
+ggsave("Dublin_Prices_REITs_not_standarized.png", plot = Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(REITs), linetype = "dashed", color = "red"), width = 14, height = 7, units = "in") 
+
+  
+```
+
+In Cork
+
+```{r}
+head(Cork_average_prices)
+
+#Cork_average_prices
+Cork_Prices_Overtime <- ggplot(Cork_average_prices, aes(x = Cork_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +  
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+    geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2010-12-01", "2016-12-31"))) +  
+  labs(title = "Cork Price Over Time During Irish REITs",     
+       x = "Date",                    
+       y = "Price") +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+#axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 12),   
+    axis.text.y = element_text(size = 14),
+    axis.title.x = element_text(size = 15),   
+    axis.title.y = element_text(size = 15),    
+    plot.title = element_text(size = 22),   
+    legend.title = element_text(size = 17),   
+    legend.text = element_text(size = 17)     
+)
+
+REITs <- as.Date("2013-12-01")
+ 
+Cork_Prices_Overtime + geom_vline(xintercept = as.numeric(REITs), linetype = "dashed", color = "red")
+#print(Cork_Prices_Overtime)
+
+ggsave("Cork_Prices_REITs_not_standarized.png", plot = Cork_Prices_Overtime + geom_vline(xintercept = as.numeric(REITs), linetype = "dashed", color = "red"), width = 14, height = 7, units = "in") 
+
+```
+
+ITS with Standarized prices
+
+
+Brexit
+
+In Dublin
+```{r}
+head(X_Dublin_average_prices)
+
+#X_Dublin_average_prices
+Dublin_Prices_Overtime <- ggplot(X_Dublin_average_prices, aes(x = X_Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +      
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2017-01-01", "2023-01-01"))) +   #limits Jan 2017 to Jan 2020
+  labs(title = "Dublin Price Over Time During Brexit",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+Brexit <- as.Date("2020-01-01")
+ 
+Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(Brexit), linetype = "dashed", color = "red")
+#print(Dublin_Prices_Overtime)
+
+#ggsave("Dublin_Prices_Brexit.png", plot = Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(Brexit), linetype = "dashed", color = "red"), width = 15, height = 6, units = "in")
+
+```
+
+In Glasgow
+
+```{r}
+head(X_data_Glasgow)
+
+#Glasgow_average_prices
+Glasgow_Prices_Overtime <- ggplot(X_data_Glasgow, aes(x = X_data_Glasgow$Date, y = Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  geom_hline(aes(yintercept = mean(Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2017-01-01", "2023-01-01"))) +   #limits Jan 2017 to Jan 2020
+  labs(title = "Glasgow Price Over Time During Brexit",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Brexit <- as.Date("2020-01-01")
+ 
+#Glasgow_Prices_Overtime + geom_vline(xintercept = as.numeric(Brexit), linetype = "dashed", color = "red")
+#print(Dublin_Prices_Overtime)
+
+#print(Glasgow_Prices_Overtime)
+
+ggsave("Glasgow_Prices_Brexit.png", plot = Glasgow_Prices_Overtime + geom_vline(xintercept = as.numeric(Brexit), linetype = "dashed", color = "red"), width = 15, height = 6, units = "in")
+
+```
+RPZ
+
+In Dublin
+
+```{r}
+head(X_Dublin_average_prices)
+
+#X_Dublin_average_prices
+Dublin_Prices_Overtime <- ggplot(X_Dublin_average_prices, aes(x = X_Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") + 
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2013-12-01", "2019-12-31"))) +  
+  labs(title = "Dublin Price Over Time During RPZ",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+RPZ <- as.Date("2016-12-01")
+ 
+Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(RPZ), linetype = "dashed", color = "red")
+#print(Dublin_Prices_Overtime)
+
+ggsave("Dublin_Prices_RPZ.png", plot = Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(RPZ), linetype = "dashed", color = "red")
+, width = 15, height = 6, units = "in")
+
+```
+
+In Cork
+
+```{r}
+head(X_Cork_average_prices)
+
+#X_Cork_average_prices
+Cork_Prices_Overtime <- ggplot(X_Cork_average_prices, aes(x = X_Cork_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +  
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2013-12-01", "2019-12-31"))) +  
+  labs(title = "Cork Price Over Time During RPZ",     
+       x = "Date",                    
+       y = "Price") +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+RPZ <- as.Date("2016-12-01")
+ 
+#Cork_Prices_Overtime + geom_vline(xintercept = as.numeric(RPZ), linetype = "dashed", color = "red")
+#print(Cork_Prices_Overtime)
+
+ggsave("Cork_Prices_RPZ.png", plot = Cork_Prices_Overtime + geom_vline(xintercept = as.numeric(RPZ), linetype = "dashed", color = "red"), width = 15, height = 6, units = "in")
+
+```
+
+Irish REITs
+
+In Dublin
+
+```{r}
+head(X_Dublin_average_prices)
+
+#X_Dublin_average_prices
+Dublin_Prices_Overtime <- ggplot(X_Dublin_average_prices, aes(x = X_Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +       
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2010-12-01", "2016-12-31"))) +  
+  labs(title = "Dublin Price Over Time During Irish REITs",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+REITs <- as.Date("2013-12-01")
+ 
+Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(REITs), linetype = "dashed", color = "red")
+#print(Dublin_Prices_Overtime)
+
+ggsave("Dublin_Prices_REITs.png", plot = Dublin_Prices_Overtime + geom_vline(xintercept = as.numeric(REITs), linetype = "dashed", color = "red")
+, width = 15, height = 6, units = "in")
+
+```
+
+In Cork
+
+```{r}
+head(X_Cork_average_prices)
+
+#X_Cork_average_prices
+Cork_Prices_Overtime <- ggplot(X_Cork_average_prices, aes(x = X_Cork_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +  
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2010-12-01", "2016-12-31"))) +  
+  labs(title = "Cork Price Over Time During Irish REITs",     
+       x = "Date",                    
+       y = "Price") +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),   
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+REITs <- as.Date("2013-12-01")
+ 
+#Cork_Prices_Overtime + geom_vline(xintercept = as.numeric(REITs), linetype = "dashed", color = "red")
+#print(Cork_Prices_Overtime)
+
+ggsave("Cork_Prices_REITs.png", plot = Cork_Prices_Overtime + geom_vline(xintercept = as.numeric(REITs), linetype = "dashed", color = "red"), width = 15, height = 6, units = "in")
+
+```
+
+
+333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333333
+
+
+
+ITS TEST
+
+Before standarizing
+
+RPZ
+
+```{r}
+head(X_Cork_average_prices)
+head(X_Dublin_average_prices)
+
+
+combined_df <- Dublin_average_prices %>%
+  rename(Dublin_Average_Price = Average_Price) %>%
+  inner_join(Cork_average_prices %>%
+               rename(Cork_Average_Price = Average_Price),
+             by = "Date")
+
+#filter the data to 36 months before and after
+intervention_date <- as.Date("2016-12-01")
+start_date <- intervention_date %m-% months(36)
+end_date <- intervention_date %m+% months(37)
+
+filtered_df <- combined_df %>%
+  filter(Date >= start_date & Date <= end_date)
+
+write.csv(filtered_df, "filtered_df.csv", row.names = FALSE)
+
+
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+
+#Plot
+ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Dublin_Average_Price, color = "Dublin")) +
+  geom_line(aes(y = Cork_Average_Price, color = "Cork")) +
+  labs(title = "Average Prices in Dublin and Cork during RPZ",
+       x = "Date",
+       y = "Average Price",
+       color = "City") +
+  theme_minimal()
+
+```
+
+```{r}
+
+filtered_df <- read_csv("filtered_df.csv")
+
+#Date to date
+filtered_df$Date <- as.Date(filtered_df$Date, format="%Y-%m-%d")
+
+
+names(filtered_df)[names(filtered_df) == 'Dublin_Average_Price'] <- 'Price_Dublin'
+names(filtered_df)[names(filtered_df) == 'Cork_Average_Price'] <- 'Price_Control'
+
+
+intervention_date <- as.Date("2016-12-01")
+filtered_df <- filtered_df %>%
+  mutate(Intervention = ifelse(Date >= intervention_date, 1, 0),
+         Time = as.numeric(Date - min(Date)) / 30) #months
+
+#its model
+its_model <- lm(Price_Dublin ~ Time * Intervention + Price_Control, data = filtered_df)
+summary(its_model)
+
+
+filtered_df <- filtered_df %>%
+  mutate(Fitted = predict(its_model, newdata = filtered_df))
+
+#plot
+ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Price_Dublin), color = "blue", size = 1) +
+  geom_line(aes(y = Fitted), color = "green", size = 1) +
+  geom_vline(xintercept = as.numeric(intervention_date), linetype = "dashed", color = "red") +
+  labs(title = "Controlled Interrupted Time Series Analysis for RPZ",
+       x = "Date",
+       y = "Average Price") +
+ theme_minimal()
+
+```
+REITs
+
+```{r}
+head(X_Cork_average_prices)
+head(X_Dublin_average_prices)
+
+
+combined_df <- Dublin_average_prices %>%
+  rename(Dublin_Average_Price = Average_Price) %>%
+  inner_join(Cork_average_prices %>%
+               rename(Cork_Average_Price = Average_Price),
+             by = "Date")
+
+#filter the data to 36 months before and after
+intervention_date <- as.Date("2013-01-01")
+start_date <- intervention_date %m-% months(36)
+end_date <- intervention_date %m+% months(37)
+
+filtered_df <- combined_df %>%
+  filter(Date >= start_date & Date <= end_date)
+
+write.csv(filtered_df, "filtered_df.csv", row.names = FALSE)
+
+
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+
+#Plot
+ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Dublin_Average_Price, color = "Dublin")) +
+  geom_line(aes(y = Cork_Average_Price, color = "Cork")) +
+  labs(title = "Average Prices in Dublin and Cork During Irish REITs",
+       x = "Date",
+       y = "Average Price",
+       color = "City") +
+  theme_minimal()
+
+```
+
+```{r}
+
+filtered_df <- read_csv("filtered_df.csv")
+
+#Date to date
+filtered_df$Date <- as.Date(filtered_df$Date, format="%Y-%m-%d")
+
+
+names(filtered_df)[names(filtered_df) == 'Dublin_Average_Price'] <- 'Price_Dublin'
+names(filtered_df)[names(filtered_df) == 'Cork_Average_Price'] <- 'Price_Control'
+
+
+intervention_date <- as.Date("2013-01-01")
+filtered_df <- filtered_df %>%
+  mutate(Intervention = ifelse(Date >= intervention_date, 1, 0),
+         Time = as.numeric(Date - min(Date)) / 30) #months
+
+#its model
+its_model <- lm(Price_Dublin ~ Time * Intervention + Price_Control, data = filtered_df)
+summary(its_model)
+
+
+filtered_df <- filtered_df %>%
+  mutate(Fitted = predict(its_model, newdata = filtered_df))
+
+#plot
+ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Price_Dublin), color = "blue", size = 1) +
+  geom_line(aes(y = Fitted), color = "green", size = 1) +
+  geom_vline(xintercept = as.numeric(intervention_date), linetype = "dashed", color = "red") +
+  labs(title = "Controlled Interrupted Time Series Analysis for REITS",
+       x = "Date",
+       y = "Average Price") +
+ theme_minimal()
+
+```
+
+Brexit
+```{r}
+head(X_data_Glasgow)
+head(X_Dublin_average_prices)
+
+
+combined_df <- Dublin_average_prices %>%
+  rename(Dublin_Average_Price = Average_Price) %>%
+  inner_join(data_Glasgow %>%
+               rename(Glasgow_Average_Price = Price),
+             by = "Date")
+
+#filter the data to 36 months before and after
+intervention_date <- as.Date("2020-01-01")
+start_date <- intervention_date %m-% months(36)
+end_date <- intervention_date %m+% months(37)
+
+filtered_df <- combined_df %>%
+  filter(Date >= start_date & Date <= end_date)
+
+write.csv(filtered_df, "filtered_df.csv", row.names = FALSE)
+
+
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+
+#Plot
+ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Dublin_Average_Price, color = "Dublin")) +
+  geom_line(aes(y = Glasgow_Average_Price, color = "Glasgow")) +
+  labs(title = "Average Prices in Dublin and Glasgow during Brexit",
+       x = "Date",
+       y = "Average Price",
+       color = "City") +
+  theme_minimal()
+
+```
+
+```{r}
+
+filtered_df <- read_csv("filtered_df.csv")
+
+#Date to date
+filtered_df$Date <- as.Date(filtered_df$Date, format="%Y-%m-%d")
+
+
+names(filtered_df)[names(filtered_df) == 'Dublin_Average_Price'] <- 'Price_Dublin'
+names(filtered_df)[names(filtered_df) == 'Glasgow_Average_Price'] <- 'Price_Control'
+
+
+intervention_date <- as.Date("2020-01-01")
+filtered_df <- filtered_df %>%
+  mutate(Intervention = ifelse(Date >= intervention_date, 1, 0),
+         Time = as.numeric(Date - min(Date)) / 30) #months
+
+#its model
+its_model <- lm(Price_Dublin ~ Time * Intervention + Price_Control, data = filtered_df)
+summary(its_model)
+
+
+filtered_df <- filtered_df %>%
+  mutate(Fitted = predict(its_model, newdata = filtered_df))
+
+#plot
+ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Price_Dublin), color = "blue", size = 1) +
+  geom_line(aes(y = Fitted), color = "green", size = 1) +
+  geom_vline(xintercept = as.numeric(intervention_date), linetype = "dashed", color = "red") +
+  labs(title = "Controlled Interrupted Time Series Analysis for Brexit",
+       x = "Date",
+       y = "Average Price") +
+  theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "lightgray"),panel.grid.major.y = element_line(color = "lightgray"),axis.line = element_line(color = "black")) 
+ #theme_minimal()
+
+```
+
+ITS TEST
+
+After Standarizing
+
+RPZ
+
+```{r}
+#head(X_X_Cork_average_prices)
+#head(X_X_Dublin_average_prices)
+
+
+combined_df <- X_Dublin_average_prices %>%
+  rename(Dublin_Average_Price = Average_Price) %>%
+  inner_join(X_Cork_average_prices %>%
+               rename(Cork_Average_Price = Average_Price),
+             by = "Date")
+
+#filter the data to 36 months before and after
+intervention_date <- as.Date("2016-12-01")
+start_date <- intervention_date %m-% months(36)
+end_date <- intervention_date %m+% months(37)
+
+filtered_df <- combined_df %>%
+  filter(Date >= start_date & Date <= end_date)
+
+write.csv(filtered_df, "filtered_df.csv", row.names = FALSE)
+
+
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+
+#Plot
+plot <- ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Dublin_Average_Price, color = "Dublin")) +
+  geom_line(aes(y = Cork_Average_Price, color = "Cork")) +
+  labs(title = "Standarized Average Prices in Dublin and Cork during RPZ",
+       x = "Date",
+       y = "Average Price",
+       color = "City") +
+  theme_minimal()
+
+RPZ <- as.Date("2016-12-01")
+ 
+plot + geom_vline(xintercept = as.numeric(RPZ), linetype = "dashed", color = "red")
+#print(Cork_Prices_Overtime)
+
+
+
+```
+
+```{r}
+
+filtered_df <- read_csv("filtered_df.csv")
+
+#Date to date
+filtered_df$Date <- as.Date(filtered_df$Date, format="%Y-%m-%d")
+
+
+names(filtered_df)[names(filtered_df) == 'Dublin_Average_Price'] <- 'Price_Dublin'
+names(filtered_df)[names(filtered_df) == 'Cork_Average_Price'] <- 'Price_Control'
+
+
+intervention_date <- as.Date("2016-12-01")
+filtered_df <- filtered_df %>%
+  mutate(Intervention = ifelse(Date >= intervention_date, 1, 0),
+         Time = as.numeric(Date - min(Date)) / 30) #months
+
+#its model
+its_model <- lm(Price_Dublin ~ Time * Intervention + Price_Control, data = filtered_df)
+summary(its_model)
+
+#coefficient of inter term
+interaction_term_coefficient <- coef(its_model)["Time:Intervention"]
+print(paste("Coefficient of the interaction term during RPZ (Time:Intervention):", interaction_term_coefficient))
+
+#p-value of inter term
+interaction_p_value <- summary(its_model)$coefficients["Time:Intervention", "Pr(>|t|)"]
+cat("P-value of interaction term during RPZ (Time:Intervention):", interaction_p_value, "\n")
+
+
+filtered_df <- filtered_df %>%
+  mutate(Fitted = predict(its_model, newdata = filtered_df))
+
+#plot
+its_test_plot <- ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Price_Dublin), color = "blue", size = 1) +
+  geom_line(aes(y = Fitted), color = "green", size = 1) +
+  geom_vline(xintercept = as.numeric(intervention_date), linetype = "dashed", color = "red") +
+  labs(title = "Controlled Interrupted Time Series Analysis in Dublin and Cork for RPZ",
+       x = "Date",
+       y = "Average Price") +
+ theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "lightgray"),panel.grid.major.y = element_line(color = "lightgray"),axis.line = element_line(color = "black")) 
+ #theme_minimal()
+
+RPZ <- as.Date("2016-12-01")
+ 
+its_test_plot + geom_vline(xintercept = as.numeric(RPZ), linetype = "dashed", color = "red")
+
+ggsave("ITS Test with Standarized Average Prices in Dublin and Cork during RPZ.png", plot = its_test_plot + geom_vline(xintercept = as.numeric(RPZ), linetype = "dashed", color = "red"), width = 15, height = 6, units = "in")
+
+```
+REITs
+
+```{r}
+#head(X_X_Cork_average_prices)
+#head(X_X_Dublin_average_prices)
+
+
+combined_df <- X_Dublin_average_prices %>%
+  rename(Dublin_Average_Price = Average_Price) %>%
+  inner_join(X_Cork_average_prices %>%
+               rename(Cork_Average_Price = Average_Price),
+             by = "Date")
+
+#filter the data to 36 months before and after
+intervention_date <- as.Date("2013-01-01")
+start_date <- intervention_date %m-% months(36)
+end_date <- intervention_date %m+% months(37)
+
+filtered_df <- combined_df %>%
+  filter(Date >= start_date & Date <= end_date)
+
+write.csv(filtered_df, "filtered_df.csv", row.names = FALSE)
+
+
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+
+#Plot
+plot <- ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Dublin_Average_Price, color = "Dublin")) +
+  geom_line(aes(y = Cork_Average_Price, color = "Cork")) +
+  labs(title = "Standarized Average Prices in Dublin and Cork During Irish REITs",
+       x = "Date",
+       y = "Average Price",
+       color = "City") +
+  theme_minimal()
+
+REITs <- as.Date("2013-01-01")
+ 
+plot + geom_vline(xintercept = as.numeric(REITs), linetype = "dashed", color = "red")
+
+```
+
+```{r}
+
+filtered_df <- read_csv("filtered_df.csv")
+
+#Date to date
+filtered_df$Date <- as.Date(filtered_df$Date, format="%Y-%m-%d")
+
+
+names(filtered_df)[names(filtered_df) == 'Dublin_Average_Price'] <- 'Price_Dublin'
+names(filtered_df)[names(filtered_df) == 'Cork_Average_Price'] <- 'Price_Control'
+
+
+intervention_date <- as.Date("2013-01-01")
+filtered_df <- filtered_df %>%
+  mutate(Intervention = ifelse(Date >= intervention_date, 1, 0),
+         Time = as.numeric(Date - min(Date)) / 30) #filter the data to 36 months before and after
+
+#its model
+its_model <- lm(Price_Dublin ~ Time * Intervention + Price_Control, data = filtered_df)
+summary(its_model)
+
+#coefficient of inter term
+interaction_term_coefficient <- coef(its_model)["Time:Intervention"]
+print(paste("Coefficient of the interaction term During Irish REITs (Time:Intervention):", interaction_term_coefficient))
+
+#p-value of inter term
+interaction_p_value <- summary(its_model)$coefficients["Time:Intervention", "Pr(>|t|)"]
+cat("P-value of interaction term During Irish REITs (Time:Intervention):", interaction_p_value, "\n")
+
+
+filtered_df <- filtered_df %>%
+  mutate(Fitted = predict(its_model, newdata = filtered_df))
+
+#plot
+its_test_plot <- ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Price_Dublin), color = "blue", size = 1) +
+  geom_line(aes(y = Fitted), color = "green", size = 1) +
+  geom_vline(xintercept = as.numeric(intervention_date), linetype = "dashed", color = "red") +
+  labs(title = "Controlled Interrupted Time Series Analysis  in Dublin and Cork for REITS",
+       x = "Date",
+       y = "Average Price") +
+ theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "lightgray"),panel.grid.major.y = element_line(color = "lightgray"),axis.line = element_line(color = "black")) 
+ #theme_minimal()
+
+REITs <- as.Date("2013-01-01")
+ 
+its_test_plot + geom_vline(xintercept = as.numeric(REITs), linetype = "dashed", color = "red")
+
+ggsave("ITS Test with Standarized Average Prices in Dublin and Cork During Irish REITs.png", plot = its_test_plot + geom_vline(xintercept = as.numeric(REITs), linetype = "dashed", color = "red"), width = 15, height = 6, units = "in")
+
+```
+
+Brexit
+```{r}
+#head(X_X_data_Glasgow)
+#head(X_X_Dublin_average_prices)
+
+
+combined_df <- X_Dublin_average_prices %>%
+  rename(Dublin_Average_Price = Average_Price) %>%
+  inner_join(X_data_Glasgow %>%
+               rename(Glasgow_Average_Price = Price),
+             by = "Date")
+
+#filter the data to 36 months before and after
+intervention_date <- as.Date("2020-01-01")
+start_date <- intervention_date %m-% months(36)
+end_date <- intervention_date %m+% months(37)
+
+filtered_df <- combined_df %>%
+  filter(Date >= start_date & Date <= end_date)
+
+write.csv(filtered_df, "filtered_df.csv", row.names = FALSE)
+
+
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+
+#Plot
+plot <- ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Dublin_Average_Price, color = "Dublin")) +
+  geom_line(aes(y = Glasgow_Average_Price, color = "Glasgow")) +
+  labs(title = "Standarized Average Prices in Dublin and Glasgow during Brexit",
+       x = "Date",
+       y = "Average Price",
+       color = "City") +
+  theme_minimal()
+
+BREXIT <- as.Date("2020-01-01")
+ 
+plot + geom_vline(xintercept = as.numeric(BREXIT), linetype = "dashed", color = "red")
+
+
+```
+
+```{r}
+
+filtered_df <- read_csv("filtered_df.csv")
+
+#Date to date
+filtered_df$Date <- as.Date(filtered_df$Date, format="%Y-%m-%d")
+
+
+names(filtered_df)[names(filtered_df) == 'Dublin_Average_Price'] <- 'Price_Dublin'
+names(filtered_df)[names(filtered_df) == 'Glasgow_Average_Price'] <- 'Price_Control'
+
+
+intervention_date <- as.Date("2020-01-01")
+filtered_df <- filtered_df %>%
+  mutate(Intervention = ifelse(Date >= intervention_date, 1, 0),
+         Time = as.numeric(Date - min(Date)) / 30) #months
+
+#its model
+its_model <- lm(Price_Dublin ~ Time * Intervention + Price_Control, data = filtered_df)
+summary(its_model)
+
+#coefficient of inter term
+interaction_term_coefficient <- coef(its_model)["Time:Intervention"]
+print(paste("Coefficient of the interaction term during Brexit (Time:Intervention):", interaction_term_coefficient))
+
+#p-value of inter term
+interaction_p_value <- summary(its_model)$coefficients["Time:Intervention", "Pr(>|t|)"]
+cat("P-value of interaction term during Brexit (Time:Intervention):", interaction_p_value, "\n")
+
+
+filtered_df <- filtered_df %>%
+  mutate(Fitted = predict(its_model, newdata = filtered_df))
+
+#plot
+its_test_plot <- ggplot(filtered_df, aes(x = Date)) +
+  geom_line(aes(y = Price_Dublin), color = "blue", size = 1) +
+  geom_line(aes(y = Fitted), color = "green", size = 1) +
+  geom_vline(xintercept = as.numeric(intervention_date), linetype = "dashed", color = "red") +
+  labs(title = "Controlled Interrupted Time Series Analysis in Dublin and Glasgow for Brexit",
+       x = "Date",
+       y = "Average Price") +
+ theme(panel.background = element_rect(fill = "white"),panel.grid.major = element_line(color = "lightgray"),panel.grid.major.y = element_line(color = "lightgray"),axis.line = element_line(color = "black")) 
+ #theme_minimal()
+
+BREXIT <- as.Date("2020-01-01")
+ 
+its_test_plot + geom_vline(xintercept = as.numeric(BREXIT), linetype = "dashed", color = "red")
+
+ggsave("ITS Test with Standarized Average Prices in Dublin and Glasgow during Brexit.png", plot = its_test_plot + geom_vline(xintercept = as.numeric(BREXIT), linetype = "dashed", color = "red"), width = 15, height = 6, units = "in")
+
+```
+
+
+
+Trends without Standarized prices
+
+
+Brexit
+
+
+Dublin
+
+Before
+```{r}
+head(Dublin_average_prices)
+
+Dublin_Prices_Overtime <- ggplot(Dublin_average_prices, aes(x = Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +      
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2017-01-01", "2020-01-01"))) +  
+  labs(title = "Dublin Price Before Brexit",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Dublin_Prices_Overtime
+#ggsave("Dublin_Trend_Prices_Before_Brexit.png", plot = Dublin_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+After
+```{r}
+head(Dublin_average_prices)
+
+Dublin_Prices_Overtime <- ggplot(Dublin_average_prices, aes(x = Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +      
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2020-01-01", "2023-01-01"))) +  
+  labs(title = "Dublin Price After Brexit",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"),
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Dublin_Prices_Overtime
+#ggsave("Dublin_Trend_Prices_After_Brexit.png", plot = Dublin_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+
+In Glasgow
+
+Before
+
+```{r}
+head(data_Glasgow)
+
+#Glasgow_average_prices
+Glasgow_Prices_Overtime <- ggplot(data_Glasgow, aes(x = data_Glasgow$Date, y = Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  geom_hline(aes(yintercept = mean(Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2017-01-01", "2020-01-01"))) +  
+  labs(title = "Glasgow Price Before Brexit",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Glasgow_Prices_Overtime
+#ggsave("Glasgow_Trend_Prices_Before_Brexit.png", plot = Glasgow_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+After
+```{r}
+head(data_Glasgow)
+
+#Glasgow_average_prices
+Glasgow_Prices_Overtime <- ggplot(data_Glasgow, aes(x = data_Glasgow$Date, y = Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  geom_hline(aes(yintercept = mean(Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2020-01-01", "2023-01-01"))) +  
+  labs(title = "Glasgow Price After Brexit",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Glasgow_Prices_Overtime
+#ggsave("Glasgow_Trend_Prices_After_Brexit.png", plot = Glasgow_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+RPZ
+
+Dublin
+
+Before
+```{r}
+head(Dublin_average_prices)
+
+#Dublin_average_prices
+Dublin_Prices_Overtime <- ggplot(Dublin_average_prices, aes(x = Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") + 
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2013-12-01", "2016-12-01"))) +  
+  labs(title = "Dublin Price Before RPZ",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Dublin_Prices_Overtime
+#ggsave("Dublin_Trend_Prices_Before_RPZ.png", plot = Dublin_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+After
+```{r}
+head(Dublin_average_prices)
+
+#Dublin_average_prices
+Dublin_Prices_Overtime <- ggplot(Dublin_average_prices, aes(x = Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") + 
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2016-12-01", "2019-12-31"))) +  
+  labs(title = "Dublin Price After RPZ",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Dublin_Prices_Overtime
+#ggsave("Dublin_Trend_Prices_After_RPZ.png", width = 15, height = 6, units = "in")
+
+```
+
+Cork
+
+Before
+```{r}
+head(Cork_average_prices)
+
+#Cork_average_prices
+Cork_Prices_Overtime <- ggplot(Cork_average_prices, aes(x = Cork_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +  
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2013-12-01", "2016-12-31"))) +  
+  labs(title = "Cork Price Before RPZ",     
+       x = "Date",                    
+       y = "Price") +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Cork_Prices_Overtime
+#ggsave("Cork_Trend_Prices_Before_RPZ.png", plot = Cork_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+After
+```{r}
+head(Cork_average_prices)
+
+#Cork_average_prices
+Cork_Prices_Overtime <- ggplot(Cork_average_prices, aes(x = Cork_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +  
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2016-12-01", "2019-12-31"))) +  
+  labs(title = "Cork Price After RPZ",     
+       x = "Date",                    
+       y = "Price") +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Cork_Prices_Overtime
+#ggsave("Cork_Trend_Prices_After_RPZ.png", plot = Cork_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+
+In Glasgow
+
+Before
+
+```{r}
+head(data_Glasgow)
+
+#Glasgow_average_prices
+Glasgow_Prices_Overtime <- ggplot(data_Glasgow, aes(x = data_Glasgow$Date, y = Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  geom_hline(aes(yintercept = mean(Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2013-12-01", "2016-12-31"))) +  
+  labs(title = "Glasgow Price Before RPZ",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Glasgow_Prices_Overtime
+#ggsave("Glasgow_Trend_Prices_Before_RPZ.png", plot = Glasgow_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+After
+```{r}
+head(data_Glasgow)
+
+#Glasgow_average_prices
+Glasgow_Prices_Overtime <- ggplot(data_Glasgow, aes(x = data_Glasgow$Date, y = Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  geom_hline(aes(yintercept = mean(Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2016-12-01", "2019-12-31"))) +  
+  labs(title = "Glasgow Price After RPZ",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Glasgow_Prices_Overtime
+#ggsave("Glasgow_Trend_Prices_After_RPZ.png", plot = Glasgow_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+Irish REITs
+
+Dublin
+
+Before
+```{r}
+head(Dublin_average_prices)
+
+#Dublin_average_prices
+Dublin_Prices_Overtime <- ggplot(Dublin_average_prices, aes(x = Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +       
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2010-12-01", "2013-12-01"))) +  
+  labs(title = "Dublin Price Before Irish REITs",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+
+Dublin_Prices_Overtime
+#ggsave("Dublin_Trend_Prices_Before_REITs.png", plot = Dublin_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+After
+```{r}
+head(Dublin_average_prices)
+
+#Dublin_average_prices
+Dublin_Prices_Overtime <- ggplot(Dublin_average_prices, aes(x = Dublin_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +       
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2013-12-01", "2016-12-31"))) +  
+  labs(title = "Dublin Price After Irish REITs",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Dublin_Prices_Overtime
+#ggsave("Dublin_Trend_Prices_After_REITs.png", plot = Dublin_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+In Cork
+
+Before
+```{r}
+head(Cork_average_prices)
+
+#Cork_average_prices
+Cork_Prices_Overtime <- ggplot(Cork_average_prices, aes(x = Cork_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +  
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2010-12-01", "2013-12-01"))) +  
+  labs(title = "Cork Price Before Irish REITs",     
+       x = "Date",                    
+       y = "Price") +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Cork_Prices_Overtime
+#ggsave("Cork_Trend_Prices_Before_REITs.png", plot = Cork_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+After
+```{r}
+head(Cork_average_prices)
+
+#Cork_average_prices
+Cork_Prices_Overtime <- ggplot(Cork_average_prices, aes(x = Cork_average_prices$Date, y = Average_Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +  
+  geom_hline(aes(yintercept = mean(Average_Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2013-12-01", "2016-12-31"))) +  
+  labs(title = "Cork Price After Irish REITs",     
+       x = "Date",                    
+       y = "Price") +
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Cork_Prices_Overtime
+#ggsave("Cork_Trend_Prices_After_REITs.png", plot = Cork_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+
+In Glasgow
+
+Before
+
+```{r}
+head(data_Glasgow)
+
+#Glasgow_average_prices
+Glasgow_Prices_Overtime <- ggplot(data_Glasgow, aes(x = data_Glasgow$Date, y = Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  geom_hline(aes(yintercept = mean(Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2010-12-01", "2013-12-01"))) +  
+  labs(title = "Glasgow Price Before Irish  REITs",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Glasgow_Prices_Overtime
+#ggsave("Glasgow_Trend_Prices_Before_REITs.png", plot = Glasgow_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
+After
+```{r}
+head(data_Glasgow)
+
+#Glasgow_average_prices
+Glasgow_Prices_Overtime <- ggplot(data_Glasgow, aes(x = data_Glasgow$Date, y = Price)) +
+  geom_line(color = "blue") +         
+  geom_point(color = "red") +         
+  geom_hline(aes(yintercept = mean(Price)), color = "blue", linetype = "dashed") + #mean line
+  geom_smooth(method = "lm", color = "red", se = FALSE) +  #trend line
+  scale_y_continuous(labels = scales::comma) + 
+  scale_x_date(date_labels = "%b-%Y",  
+               date_breaks = "month",  
+               limits = as.Date(c("2013-12-01", "2016-12-01"))) +  
+  labs(title = "Glasgow Price After Irish REITs",     
+       x = "Date",                    
+       y = "Price") +                 
+  theme(
+    panel.background = element_rect(fill = "white"),
+    panel.grid.major = element_line(color = "lightgray"),
+    panel.grid.major.y = element_line(color = "lightgray"),
+    axis.line = element_line(color = "black"), 
+    axis.text.x = element_text(angle = 90, vjust = 0.5,hjust=1)
+  )
+
+Glasgow_Prices_Overtime
+#ggsave("Glasgow_Trend_Prices_After_REITs.png", plot = Glasgow_Prices_Overtime, width = 15, height = 6, units = "in")
+
+```
+
